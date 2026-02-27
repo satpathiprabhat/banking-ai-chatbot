@@ -1,0 +1,22 @@
+# Secrets — never commit real API keys
+apiKey.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# OS / IDE
+.DS_Store
+.idea/
+*.iml
+
+# Jupyter
+.ipynb_checkpoints/

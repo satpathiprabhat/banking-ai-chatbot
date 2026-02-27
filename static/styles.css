@@ -1,0 +1,311 @@
+/* THEME VARIABLES */
+:root {
+  --bg-color: #f5f5f5;
+  --chat-bg: #ffffff;
+  --user-msg-bg: #0078d4;
+  --assistant-msg-bg: #e5e5ea;
+  --text-color: #000000;
+  --button-bg: #0078d4;
+  --button-text: #ffffff;
+}
+
+[data-theme="dark"] {
+  --bg-color: #1a1a1a;
+  --chat-bg: #353535;
+  --user-msg-bg: #005ea0;
+  --assistant-msg-bg: #444444;
+  --text-color: #ffffff;
+  --button-bg: #666666;
+  --button-text: #ffffff;
+}
+
+body {
+  font-family: Arial, sans-serif;
+  background: var(--bg-color);
+  color: var(--text-color);
+  margin: 0;
+}
+
+.chat-container {
+  max-width: 750px;
+  margin: 40px auto;
+  background: var(--chat-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+  display: flex;
+  flex-direction: column;
+  height: 80vh;
+  padding: 20px;
+}
+
+[data-theme="dark"] .chat-container {
+  box-shadow: 0 0 20px rgba(0,0,0,0.6);
+}
+
+#chat-window {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.message {
+  margin: 8px 0;
+  padding: 10px 14px;
+  border-radius: 16px;
+  max-width: 80%;
+  line-height: 1.4;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.15);
+  font-weight: 500;
+}
+
+.user-message {
+  background: var(--user-msg-bg);
+  color: var(--button-text);
+  align-self: flex-end;
+  border-radius: 16px 4px 16px 16px;
+}
+
+.assistant-message {
+  background: var(--assistant-msg-bg);
+  color: var(--text-color);
+  align-self: flex-start;
+  border-radius: 16px 16px 16px 4px;
+}
+
+.input-area {
+  display: flex;
+  padding: 10px;
+  border-top: 1px solid #ddd;
+  background: var(--chat-bg);
+}
+
+.input-area textarea {
+  flex: 1;
+  padding: 8px;
+  border-radius: 5px;
+  border: 1px solid #ccc;
+  font-size: 14px;
+  background: var(--bg-color);
+  color: var(--text-color);
+  resize: vertical;
+}
+
+.input-area button {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  margin-left: 8px;
+  padding: 8px 14px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.input-area button:hover {
+  opacity: 0.9;
+}
+
+.theme-btn {
+  margin: 10px auto;
+  display: block;
+  padding: 6px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: none;
+  background: var(--button-bg);
+  color: var(--button-text);
+}
+
+/* Timestamp styling */
+.timestamp {
+  font-size: 0.75em;
+  opacity: 0.6;
+  margin-top: 4px;
+  display: block;
+  text-align: right;
+}
+
+.assistant-message .timestamp {
+  text-align: left;
+}
+
+/* Typing indicators */
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.typing-indicator .dot {
+  width: 6px;
+  height: 6px;
+  background-color: var(--text-color);
+  border-radius: 50%;
+  animation: bounce 1.4s infinite ease-in-out;
+}
+
+.typing-indicator .dot:nth-child(1) { animation-delay: -0.32s; }
+.typing-indicator .dot:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+  0%, 80%, 100% { transform: scale(0); }
+  40% { transform: scale(1); }
+}
+
+/* Login page styles */
+.login-container {
+  max-width: 400px;
+  margin: 100px auto;
+  background: var(--chat-bg);
+  padding: 30px;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  text-align: center;
+}
+
+.login-input {
+  width: 100%;
+  padding: 10px;
+  margin: 8px 0;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+}
+
+.login-btn {
+  width: 100%;
+  padding: 10px;
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-top: 10px;
+}
+
+.login-btn:hover {
+  opacity: 0.9;
+}
+/*error handling */
+.error-text { color: #b00020; margin-top: 8px; }
+
+
+/* header and logut */
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--header-bg, #222);
+  padding: 10px 20px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  color: var(--text-color, #fff);
+}
+
+.logo {
+  font-size: 22px;
+}
+
+.header-right {
+  position: relative;
+}
+
+.profile-icon {
+  background: #555;
+  color: #fff;
+  border: none;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  cursor: pointer;
+}
+.profile-menu {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.welcome-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-color);
+}
+.dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--chat-bg, #fff);
+  color: var(--text-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+  padding: 8px;
+  z-index: 100;
+  min-width: 150px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dropdown.hidden {
+  display: none;
+}
+
+.dropdown p {
+  margin: 0 0 10px 0;
+  font-weight: 500;
+}
+
+.dropdown button {
+  background: var(--button-bg);
+  color: var(--button-text);
+  border: none;
+  padding: 6px 12px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 4px;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+
+
+/* Theme toggle button styling only; emoji handled by JS */
+/*#theme-toggle {
+  /* Add any desired button styling here, if needed 
+}*/
+
+#logout-btn::before {
+  content: "🚪";
+  font-size: 16px;
+}
+
+.dropdown button:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+#logout-btn {
+  background: #e74c3c;
+  color: #fff;
+  border-radius: 4px;
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+}
+
+#logout-btn:hover {
+  background: #c0392b;
+}
+#theme-toggle:hover {
+  opacity: 0.9;
+}

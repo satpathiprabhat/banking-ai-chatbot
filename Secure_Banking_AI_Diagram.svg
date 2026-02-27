@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <style>
+    .box { fill:#f8f9fa; stroke:#2b2f33; stroke-width:2; rx:8; }
+    .text { font-family: Arial, sans-serif; font-size:14px; fill:#111; }
+    .title { font-size:18px; font-weight:700; }
+    .small { font-size:12px; fill:#333; }
+    .arrow { stroke:#2b2f33; stroke-width:2; fill:none; marker-end:url(#arrowhead); }
+  </style>
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#2b2f33" />
+    </marker>
+  </defs>
+
+  <text x="20" y="30" class="title">Secure Banking AI — High-level Architecture</text>
+
+  <!-- Client & Staff -->
+  <rect x="20" y="60" width="260" height="80" class="box" />
+  <text x="40" y="90" class="text">Client (Web / Mobile)</text>
+  <text x="40" y="110" class="small">TLS, OAuth2, MFA</text>
+
+  <rect x="920" y="60" width="260" height="80" class="box" />
+  <text x="940" y="90" class="text">Staff Dashboard</text>
+  <text x="940" y="110" class="small">Mutual TLS, RBAC</text>
+
+  <!-- API Gateway -->
+  <rect x="320" y="60" width="260" height="80" class="box" />
+  <text x="350" y="90" class="text">API Gateway / WAF</text>
+  <text x="350" y="110" class="small">AuthN/AuthZ, RateLimit, Audit</text>
+
+  <!-- Banking Assistant -->
+  <rect x="320" y="180" width="260" height="120" class="box" />
+  <text x="350" y="205" class="text">Banking Assistant Service</text>
+  <text x="350" y="225" class="small">FastAPI orchestration</text>
+  <text x="350" y="245" class="small">Intent detection, Prompt templating</text>
+
+  <!-- Internal CBS Adapter -->
+  <rect x="320" y="340" width="260" height="80" class="box" />
+  <text x="350" y="370" class="text">Internal CBS Adapter</text>
+  <text x="350" y="390" class="small">Masking, validation, audit</text>
+
+  <!-- CBS Middleware & Core -->
+  <rect x="320" y="440" width="260" height="80" class="box" />
+  <text x="350" y="470" class="text">CBS Middleware / ESB</text>
+  <text x="350" y="490" class="small">Kafka / MQ</text>
+
+  <rect x="320" y="540" width="260" height="80" class="box" />
+  <text x="350" y="570" class="text">Core Banking System</text>
+  <text x="350" y="590" class="small">Finacle / Flexcube / T24</text>
+
+  <!-- Vector DB & Cache -->
+  <rect x="620" y="300" width="240" height="80" class="box" />
+  <text x="640" y="325" class="text">Vector DB (RAG)</text>
+  <text x="640" y="345" class="small">Encrypted, access controlled</text>
+
+  <rect x="620" y="400" width="240" height="60" class="box" />
+  <text x="640" y="430" class="text">Cache (Redis)</text>
+  <text x="640" y="450" class="small">Encrypted</text>
+
+  <!-- Secrets & Monitoring -->
+  <rect x="620" y="480" width="240" height="60" class="box" />
+  <text x="640" y="505" class="text">Secrets (Vault/KMS)</text>
+
+  <rect x="620" y="560" width="240" height="80" class="box" />
+  <text x="640" y="590" class="text">Audit Logs / Monitoring</text>
+  <text x="640" y="610" class="small">SIEM, Prometheus, Grafana</text>
+
+  <!-- Arrows -->
+  <path d="M280 100 L320 100" class="arrow" />
+  <path d="M580 100 L920 100" class="arrow" />
+  <path d="M450 180 L450 300" class="arrow" />
+  <path d="M450 300 L580 340" class="arrow" />
+  <path d="M450 420 L450 440" class="arrow" />
+  <path d="M450 520 L450 540" class="arrow" />
+
+  <path d="M580 220 L620 330" class="arrow" />
+  <path d="M580 360 L620 360" class="arrow" />
+  <path d="M580 440 L620 480" class="arrow" />
+
+  <!-- Notes -->
+  <text x="20" y="730" class="small">Note: Prefer hosting LLM inside bank VPC for sensitive data. Cloud LLMs only with masked data & legal clearance.</text>
+</svg>

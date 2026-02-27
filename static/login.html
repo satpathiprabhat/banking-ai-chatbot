@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Login - Banking Assistant</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-theme="light">
+
+  <div class="login-container">
+    <h2>Login</h2>
+    <input id="username" type="text" placeholder="Username" class="login-input">
+    <input id="password" type="password" placeholder="Password" class="login-input">
+    <button id="login-btn" class="login-btn">Login</button>
+    <p id="login-error" class="error-text"></p>
+  </div>
+
+  <script>
+    document.getElementById('login-btn').addEventListener('click', async () => {
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const res = await fetch('/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        localStorage.setItem('token', data.token);
+        window.location = '/static/index.html';
+      } else {
+        document.getElementById('login-error').innerText = 'Incorrect username or password';
+      }
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+requests
+httpx
+PyJWT==2.8.0
+sentence-transformers>=2.6.0
+faiss-cpu>=1.8.0.post1
+google-generativeai
+langchain
