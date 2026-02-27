@@ -15,6 +15,9 @@ pip install -r requirements.txt
 # Start the development server
 uvicorn app.main:app --reload --port 8000
 
+# Start with debug logging
+LOG_LEVEL=DEBUG uvicorn app.main:app --reload --port 8000
+
 # Rebuild the FAISS knowledge base index (after editing KB markdown files)
 python app/scripts/ingest_kb.py --src app/data/kb --out app/data/rag
 
@@ -128,6 +131,7 @@ RAG_TOP_K=3
 
 SERVICE_TOKEN=test-token      # token for internal CBS adapter calls
 MOCK_LOCKED_STATUS=false      # set true to simulate a locked account
+LOG_LEVEL=INFO                # DEBUG | INFO | WARNING | ERROR
 ```
 
 Demo credentials (auth_routes.py): `admin` / `password123`
@@ -156,10 +160,42 @@ python app/scripts/ingest_kb.py --src app/data/kb --out app/data/rag
 
 ---
 
+## Logging
+
+Configured centrally in `app/logger.py`, called once in `app/main.py`. Every module gets its own logger via `logging.getLogger(__name__)` — no `print()` calls anywhere in the app.
+
+**Log format:**
+```
+2025-08-27 10:30:15 | INFO     | app.routes.assist | [AUDIT] PII-like input detected; request deflected
+2025-08-27 10:30:16 | INFO     | app.services.llm_stub | Gemini call completed in 1.23s
+2025-08-27 10:30:16 | WARNING  | app.routes.assist | [GUARDRAIL] Output rewritten: {'notes': ['removed_unproven_lock_claim']}
+```
+
+**Level conventions:**
+
+| Level | Used for |
+|---|---|
+| `DEBUG` | Intent, RAG chunk count, masked prompt contents, provider selection |
+| `INFO` | LLM call duration, `[AUDIT]` PII deflection events |
+| `WARNING` | `[GUARDRAIL]` output rewrites, RAG retrieval failures |
+| `ERROR` | LLM call failures — always includes `exc_info=True` for full stack trace |
+
+**Adding logging to new modules:**
+```python
+import logging
+logger = logging.getLogger(__name__)
+```
+
+**`[AUDIT]` and `[GUARDRAIL]` prefixes** are kept in the message string intentionally — they make compliance-relevant events easy to grep regardless of log aggregation tool.
+
+**Noisy third-party libs** (`sentence_transformers`, `faiss`, `httpx`, `httpcore`, `urllib3`) are suppressed to `WARNING` in `app/logger.py`.
+
+---
+
 ## Important Constraints
 
 - Never feed raw PII or CBS data into the FAISS index.
 - Never call CBS (`cbs_adapter`) for `knowledge` intent — only RAG is used there.
 - Never include lock/blocked fields in `transactional:feature` CBS context — this prevents false "your account is blocked" responses for post-login feature issues.
 - The compliance guardrail in `compliance.py` is the last line of defense against hallucinated lock claims — do not bypass it.
-- All logging uses `[AUDIT]`, `[DEBUG]`, `[WARN]`, `[ERROR]`, `[GUARDRAIL]` prefixes for traceability.
+- Never use `print()` — use `logging.getLogger(__name__)` in every module.
