@@ -134,6 +134,41 @@ Tests mock both the LLM and CBS adapter — no real API keys are needed.
 
 ---
 
+## Logging
+
+Logging is configured centrally in `app/logger.py` and initialised once at startup. Every module uses `logging.getLogger(__name__)` — no `print()` calls.
+
+**Log format:**
+```
+2025-08-27 10:30:15 | INFO     | app.routes.assist | [AUDIT] PII-like input detected; request deflected
+2025-08-27 10:30:16 | INFO     | app.services.llm_stub | Gemini call completed in 1.23s
+2025-08-27 10:30:16 | WARNING  | app.routes.assist | [GUARDRAIL] Output rewritten: {'notes': ['removed_unproven_lock_claim']}
+```
+
+**Log levels used:**
+
+| Level | Used for |
+|---|---|
+| `DEBUG` | Intent detection, RAG chunk count, masked prompt contents, provider selection |
+| `INFO` | LLM call duration, `[AUDIT]` compliance events |
+| `WARNING` | `[GUARDRAIL]` output rewrites, RAG retrieval failures |
+| `ERROR` | LLM call failures (includes full stack trace via `exc_info=True`) |
+
+**Control the log level** via the `LOG_LEVEL` environment variable:
+
+```bash
+# Default — INFO and above
+uvicorn app.main:app --port 8000
+
+# Verbose debug output (shows prompts, intent, chunk counts)
+LOG_LEVEL=DEBUG uvicorn app.main:app --port 8000
+
+# Errors only
+LOG_LEVEL=ERROR uvicorn app.main:app --port 8000
+```
+
+---
+
 ## CI/CD
 
 GitHub Actions workflow at `.github/workflows/ci-cd.yml`:
@@ -163,3 +198,4 @@ GitHub Actions workflow at `.github/workflows/ci-cd.yml`:
 | `RAG_TOP_K` | `3` | Number of KB chunks retrieved per query |
 | `SERVICE_TOKEN` | `test-token` | Internal token for CBS adapter calls |
 | `MOCK_LOCKED_STATUS` | `false` | Set `true` to simulate a locked account |
+| `LOG_LEVEL` | `INFO` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |
