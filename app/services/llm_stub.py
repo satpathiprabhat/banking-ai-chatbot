@@ -1,10 +1,12 @@
+import logging
 import os
 import re
 import time
-from datetime import datetime
 from typing import List, Dict, Union
 
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # --------------------------
 # Masking (unchanged)
@@ -31,9 +33,6 @@ LLM_MODEL_ID = os.getenv("LLM_MODEL_ID")  # optional override
 
 # Keep lazy singletons to avoid re-creating clients every call
 _openai_client = None
-
-def _now() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 def _to_messages(prompt: Union[str, List[Dict]]) -> List[Dict]:
     """
@@ -97,20 +96,18 @@ def _call_gemini(messages: List[Dict]) -> str:
             other_messages = [{"role": "user", "content": joined}]
 
     gemini_input = [{"role": m.get("role", "user"), "parts": [m.get("content", "")]} for m in other_messages]
-    print(f"[DEBUG {_now()}] Prepared gemini_input (masked): {gemini_input}")
+    logger.debug("Prepared gemini_input (masked): %s", gemini_input)
 
     model_id = os.getenv("LLM_MODEL_ID") or LLM_MODEL_ID or "gemini-1.5-flash"
-    print(f"[DEBUG {_now()}] Using Gemini model: {model_id}")
+    logger.debug("Using Gemini model: %s", model_id)
     model = genai.GenerativeModel(model_id)  # type: ignore
 
-    print(f"[DEBUG {_now()}] Creating Gemini model instance: {model_id}")
     start = time.time()
     resp = model.generate_content(gemini_input)
     dur = time.time() - start
-    print(f"[DEBUG {_now()}] Gemini call completed in {dur:.2f}s. Raw: {resp}")
+    logger.info("Gemini call completed in %.2fs", dur)
 
     if hasattr(resp, "text") and resp.text:
-        print(f"[INFO {_now()} - In side if block about to retrun resp.text")
         return resp.text
     return "[Error] No response text received from Gemini."
 
@@ -138,7 +135,7 @@ def _call_openai(messages: List[Dict]) -> str:
     client = _ensure_openai_client()
 
     oa_messages = [{"role": m.get("role", "user"), "content": m.get("content", "") or ""} for m in messages]
-    print(f"[DEBUG {_now()}] OpenAI messages (masked): {oa_messages}")
+    logger.debug("OpenAI messages (masked): %s", oa_messages)
 
     model_id = os.getenv("LLM_MODEL_ID") or LLM_MODEL_ID or "gpt-4o-mini"
 
@@ -149,7 +146,7 @@ def _call_openai(messages: List[Dict]) -> str:
         temperature=0.2,
     )
     dur = time.time() - start
-    print(f"[DEBUG {_now()}] OpenAI call completed in {dur:.2f}s. Resp id: {getattr(resp, 'id', 'n/a')}")
+    logger.info("OpenAI call completed in %.2fs | resp_id=%s", dur, getattr(resp, "id", "n/a"))
 
     try:
         return resp.choices[0].message.content or "[Error] Empty response from OpenAI."
@@ -167,15 +164,14 @@ def call_llm(prompt: Union[str, List[Dict]]) -> str:
       - list of chat messages: [{"role": "system"|"user"|"assistant", "content": "..."}]
     Applies masking and routes to configured provider.
     """
-    # Debug original (unmasked) prompt safely
-    print(f"[DEBUG {_now()}] call_llm prompt type: {type(prompt).__name__}")
+    logger.debug("call_llm invoked | prompt type: %s", type(prompt).__name__)
 
     try:
         messages = _to_messages(prompt)
         masked_messages = _mask_messages(messages)
 
         provider = (os.getenv("LLM_PROVIDER") or LLM_PROVIDER).strip().lower()
-        print(f"[DEBUG {_now()}] Provider: {provider}")
+        logger.debug("LLM provider: %s", provider)
 
         if provider == "openai":
             return _call_openai(masked_messages)
@@ -183,5 +179,5 @@ def call_llm(prompt: Union[str, List[Dict]]) -> str:
         return _call_gemini(masked_messages)
 
     except Exception as e:
-        print(f"[ERROR {_now()}] LLM call failed: {e}")
+        logger.error("LLM call failed: %s", e, exc_info=True)
         return "I'm sorry, I'm currently facing some technical difficulties. Please try again in a little while."

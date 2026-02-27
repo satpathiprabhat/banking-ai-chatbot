@@ -1,8 +1,11 @@
 from fastapi import FastAPI, Request, HTTPException
 from app.routes import assist
 from app.routes import auth_routes
+from app.logger import setup_logging
 from fastapi.staticfiles import StaticFiles
 import os
+
+setup_logging()
 
 app = FastAPI(title="Banking Assisstant")
 

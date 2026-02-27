@@ -14,6 +14,7 @@ Notes:
 - Keep the corpus free of PII. This index is for FAQs/Policies/How-tos.
 """
 
+import logging
 import os
 import re
 import json
@@ -21,6 +22,13 @@ import argparse
 from typing import List, Dict, Tuple
 
 import numpy as np
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s | %(levelname)-8s | %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 try:
     import faiss  # type: ignore
@@ -81,7 +89,7 @@ def walk_corpus(src_dir: str) -> List[Tuple[str, str]]:
                 rel = os.path.relpath(full, src_dir)
                 items.append((rel, txt))
             except Exception as e:
-                print(f"[WARN] Skipping {full}: {e}")
+                logger.warning("Skipping %s: %s", full, e)
     return items
 
 
@@ -91,7 +99,7 @@ def build_index(src_dir: str, out_dir: str, model_name: str = DEFAULT_EMBEDDING_
     if not items:
         raise SystemExit(f"No .txt/.md files found under {src_dir}")
 
-    print(f"[INGEST] Files: {len(items)}  |  Model: {model_name}")
+    logger.info("Files: %d | Model: %s", len(items), model_name)
 
     model = SentenceTransformer(model_name)
     meta: List[Dict] = []
@@ -121,9 +129,9 @@ def build_index(src_dir: str, out_dir: str, model_name: str = DEFAULT_EMBEDDING_
     with open(os.path.join(out_dir, "meta.json"), "w", encoding="utf-8") as f:
         json.dump(meta, f, ensure_ascii=False)
 
-    print(f"[INGEST] Saved {len(meta)} chunks")
-    print(f"[INGEST] Index: {os.path.join(out_dir, 'index.faiss')}")
-    print(f"[INGEST] Meta : {os.path.join(out_dir, 'meta.json')}")
+    logger.info("Saved %d chunks", len(meta))
+    logger.info("Index: %s", os.path.join(out_dir, "index.faiss"))
+    logger.info("Meta : %s", os.path.join(out_dir, "meta.json"))
 
 
 def main():

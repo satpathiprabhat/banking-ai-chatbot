@@ -12,12 +12,15 @@ Security notes:
 - Do NOT index PII. Do NOT feed raw CBS/PII into this index.
 """
 
+import logging
 import os
 import json
 from typing import List, Dict, Tuple
 
 import numpy as np
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Optional imports guarded so app still runs if RAG files not present
 try:
@@ -118,5 +121,5 @@ def retrieve(query: str, top_k: int = TOP_K_DEFAULT) -> List[Dict]:
             })
         return out
     except Exception as e:
-        print(f"[WARN] RAG retrieve failed: {e}")
+        logger.warning("RAG retrieve failed: %s", e)
         return []

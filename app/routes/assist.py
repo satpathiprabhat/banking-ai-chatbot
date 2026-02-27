@@ -4,9 +4,12 @@ from fastapi import APIRouter, HTTPException, Depends
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import Optional, List, Dict
+import logging
 import os
 import re
 import uuid
+
+logger = logging.getLogger(__name__)
 
 from app.services.auth import verify_jwt_token
 from app.services.llm_stub import call_llm, mask_sensitive_info
@@ -150,7 +153,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
 
     # 2) PII hard stop — DO NOT call CBS or LLM blocking if PII-data
     if contains_pii_like(req.query):
-        print("[AUDIT] PII-like user input detected; deflected; LLM/CBS skipped.")
+        logger.info("[AUDIT] PII-like input detected; request deflected — LLM/CBS skipped.")
         return {
             "request_id": request_id,
             "status": "ok",  # treated as normal assistant message in UI
@@ -170,8 +173,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
     retrieved: List[Dict] = []  # type-stable list
     masked_ctx: Dict = {}
 
-    print("[DEBUG] intent:", intent)
-    print("[DEBUG] RAG available:", RAG_AVAILABLE)
+    logger.debug("intent=%s | RAG available=%s", intent, RAG_AVAILABLE)
 
     # Enable RAG for knowledge AND feature intents (blended mode)
     if (intent == "knowledge" or intent == "transactional:feature") and RAG_AVAILABLE:
@@ -179,9 +181,9 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
             rag_query = req.query if intent == "knowledge" else _feature_hint(req.query)
             retrieved = rag_service.retrieve(rag_query, top_k=3)  # type: ignore
         except Exception as e:
-            print(f"[WARN] RAG retrieve failed: {e}")
+            logger.warning("RAG retrieve failed: %s", e)
             retrieved = []
-        print("[DEBUG] retrieved_k:", len(retrieved))
+        logger.debug("RAG chunks retrieved: %d", len(retrieved))
 
     if intent == "transactional:login":
         # Only now call CBS; include lock-related fields (masked summary)
@@ -215,9 +217,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
             "reason_code": masked_full.get("reason_code"),
         }
 
-    # Debug (helpful while stabilizing)
-    print("[DEBUG] masked_ctx:", masked_ctx)
-    print("[DEBUG] history_len:", len(safe_history))
+    logger.debug("masked_ctx=%s | history_len=%d", masked_ctx, len(safe_history))
 
     # 6) Build prompt
     try:
@@ -241,7 +241,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
     # 8) Post-gen guardrail: remove speculative lock/credential claims without evidence
     safe_answer, diag = enforce_output_policies(answer, intent=intent, masked_ctx=masked_ctx)
     if diag.get("changed"):
-        print(f"[GUARDRAIL] Output rewritten: {diag}")
+        logger.warning("[GUARDRAIL] Output rewritten: %s", diag)
 
     # 9) Prepare sources list for UI (always include)
     sources = [r.get("source") for r in retrieved if isinstance(r, dict) and r.get("source")]
