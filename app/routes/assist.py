@@ -20,20 +20,6 @@ from app.services.compliance import enforce_output_policies  # post-gen guardrai
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-
-def _retrieve_rag(query: str, *, top_k: int) -> List[Dict]:
-    try:
-        from app.services import rag_service
-    except Exception as exc:
-        logger.warning("RAG import failed: %s", exc)
-        return []
-
-    try:
-        return rag_service.retrieve(query, top_k=top_k)  # type: ignore[attr-defined]
-    except Exception as exc:
-        logger.warning("RAG retrieve failed: %s", exc)
-        return []
-
 # -------------------- Request Model --------------------
 class AssistRequest(BaseModel):
     session_id: str
@@ -106,7 +92,7 @@ def detect_intent(query: str) -> str:
     Return one of:
       - 'transactional:login'     (authentication/access problems)
       - 'transactional:feature'   (post-login feature issues)
-      - 'knowledge'               (FAQ/policy/product info → RAG)
+      - 'knowledge'               (FAQ/policy/product info)
       - 'transactional'           (fallback transactional)
     Default to 'knowledge' if ambiguous (safer; avoids PII/CBS).
     """
@@ -121,19 +107,6 @@ def detect_intent(query: str) -> str:
         return "transactional"
     return "knowledge"
 
-# Feature keyword → KB retrieval hint
-def _feature_hint(query: str) -> str:
-    q = (query or "").lower()
-    if "balance" in q:
-        return "NetBanking balance enquiry troubleshooting"
-    if "transfer" in q or "imps" in q or "neft" in q:
-        return "Fund transfer troubleshooting"
-    if "statement" in q:
-        return "Mini statement / account statement troubleshooting"
-    if "pin" in q and ("debit" in q or "credit" in q):
-        return "Reset debit/credit card PIN steps"
-    return "NetBanking feature troubleshooting steps"
-
 # -------------------- Route --------------------
 @router.post("/", response_model=dict)
 async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
@@ -143,16 +116,15 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
       2) PII gate (short-circuit; no CBS/LLM)
       3) Detect intent (+ sub-intent)
       4) Build context:
-         - knowledge → RAG retrieved chunks (no PII)
+         - knowledge → general assistant guidance
          - transactional:login → minimal lock/failed-login fields
-         - transactional:feature → NO lock fields; DO retrieve KB troubleshooting
+         - transactional:feature → NO lock fields
       5) Build prompt with sanitized history
       6) Call LLM (only if no PII)
       7) Post-gen guardrail to remove speculative lock/cred claims
     """
     request_id = f"req-{uuid.uuid4().hex[:12]}"
     settings = get_settings()
-    rag_enabled = settings.enable_rag
 
     # 1) AuthN
     username = verify_jwt_token(token)
@@ -167,8 +139,6 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
             "status": "ok",  # treated as normal assistant message in UI
             "message": SAFE_PII_RESPONSE,
             "intent": "pii_deflected",
-            "rag_used": False,
-            "rag_enabled": rag_enabled,
             "sources": [],
         }
 
@@ -179,19 +149,8 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
     safe_history = sanitize_history(req.history, intent=intent)
 
     # 5) Prepare context depending on intent
-    retrieved: List[Dict] = []  # type-stable list
     masked_ctx: Dict = {}
-
-    logger.debug("intent=%s | RAG enabled=%s", intent, rag_enabled)
-
-    # Enable RAG for knowledge AND feature intents (blended mode)
-    if intent == "knowledge" or intent == "transactional:feature":
-        if rag_enabled:
-            rag_query = req.query if intent == "knowledge" else _feature_hint(req.query)
-            retrieved = _retrieve_rag(rag_query, top_k=settings.rag_top_k)
-            logger.debug("RAG chunks retrieved: %d", len(retrieved))
-        else:
-            logger.info("RAG disabled by configuration; skipping retrieval for intent=%s", intent)
+    logger.debug("intent=%s", intent)
 
     if intent == "transactional:login":
         # Only now call CBS; include lock-related fields (masked summary)
@@ -232,7 +191,6 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
             masked_context=masked_ctx,
             history=safe_history,
             intent=intent,
-            retrieved=retrieved,
         )
     except TypeError:
         # Fallback if local build_prompt lacks new params
@@ -250,7 +208,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
         logger.warning("[GUARDRAIL] Output rewritten: %s", diag)
 
     # 9) Prepare sources list for UI (always include)
-    sources = [r.get("source") for r in retrieved if isinstance(r, dict) and r.get("source")]
+    sources: List[str] = []
 
     # 10) Consistent response for UI
     if isinstance(safe_answer, str) and safe_answer.startswith("I'm sorry, I'm currently facing"):
@@ -259,8 +217,6 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
             "status": "error",
             "message": safe_answer,
             "intent": intent,
-            "rag_used": bool(retrieved),
-            "rag_enabled": rag_enabled,
             "sources": sources,
         }
 
@@ -269,7 +225,5 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
         "status": "ok",
         "message": safe_answer if isinstance(safe_answer, str) else "Sorry, something went wrong.",
         "intent": intent,
-        "rag_used": bool(retrieved),
-        "rag_enabled": rag_enabled,
         "sources": sources,
     }

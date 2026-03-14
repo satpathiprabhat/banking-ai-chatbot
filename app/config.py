@@ -27,11 +27,6 @@ class Settings:
     gemini_api_key: str
     openai_base_url: str
     openai_api_key: str
-    embedding_model: str
-    rag_index_path: str
-    rag_meta_path: str
-    rag_top_k: int
-    enable_rag: bool
     mock_locked_status: bool
 
     @property
@@ -56,10 +51,5 @@ def get_settings() -> Settings:
         gemini_api_key=(os.getenv("GEMINI_API_KEY") or "").strip(),
         openai_base_url=(os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip().rstrip("/"),
         openai_api_key=(os.getenv("OPENAI_API_KEY") or "").strip(),
-        embedding_model=(os.getenv("EMBEDDING_MODEL") or "all-MiniLM-L6-v2").strip(),
-        rag_index_path=(os.getenv("RAG_INDEX_PATH") or "app/data/rag/index.faiss").strip(),
-        rag_meta_path=(os.getenv("RAG_META_PATH") or "app/data/rag/meta.json").strip(),
-        rag_top_k=int(os.getenv("RAG_TOP_K", "3")),
-        enable_rag=(os.getenv("ENABLE_RAG", "true").lower() in {"1", "true", "yes"}),
         mock_locked_status=(os.getenv("MOCK_LOCKED_STATUS", "false").lower() in {"1", "true", "yes"}),
     )

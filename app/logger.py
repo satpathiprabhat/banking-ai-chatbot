@@ -23,5 +23,5 @@ def setup_logging() -> None:
     logging.basicConfig(level=level, format=fmt, datefmt=datefmt)
 
     # Quieten noisy third-party libraries
-    for lib in ("sentence_transformers", "faiss", "httpx", "httpcore", "urllib3"):
+    for lib in ("httpx", "httpcore", "urllib3"):
         logging.getLogger(lib).setLevel(logging.WARNING)

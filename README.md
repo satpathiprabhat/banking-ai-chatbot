@@ -1,13 +1,12 @@
 # Banking AI Chatbot
 
-A secure, production-oriented banking AI assistant built with FastAPI, FAISS RAG, and Gemini/OpenAI. It provides grounded, compliance-first responses for customer banking queries — with multi-layer security gates that prevent PII exposure and hallucinated account claims.
+A secure, production-oriented banking AI assistant built with FastAPI and REST-based LLM integration. It provides compliance-first responses for customer banking queries with multi-layer security gates that prevent PII exposure and hallucinated account claims.
 
 ---
 
 ## Features
 
 - **Intent-aware routing** — classifies queries into `knowledge`, `transactional:login`, or `transactional:feature` and fetches only the context relevant to each
-- **RAG grounding** — FAISS vector search over a curated knowledge base; LLM is forbidden from answering knowledge queries outside the retrieved context
 - **PII protection** — regex gate blocks and deflects any input containing account numbers, card numbers, OTPs, PAN, Aadhaar, UPI IDs, etc. before reaching the LLM
 - **Post-generation compliance** — a guardrail rewrites hallucinated "account locked / wrong credentials" claims if the CBS context doesn't confirm them
 - **JWT authentication** — every `/assist` request requires a valid Bearer token (1-hour expiry)
@@ -21,7 +20,7 @@ A secure, production-oriented banking AI assistant built with FastAPI, FAISS RAG
 ```
 User → /auth/login → JWT token
      → /assist/   → PII Gate → Intent Detection
-                             → Context Fetching (RAG / CBS)
+                             → Context Fetching (CBS when needed)
                              → Prompt Builder
                              → LLM (Gemini or OpenAI)
                              → Compliance Guardrail
@@ -33,7 +32,6 @@ User → /auth/login → JWT token
 | API routes | `app/routes/assist.py`, `app/routes/auth_routes.py` |
 | Intent detection & safety gates | `app/routes/assist.py` |
 | Prompt construction | `app/services/prompt_builder.py` |
-| Vector search (RAG) | `app/services/rag_service.py` |
 | LLM abstraction | `app/services/llm_stub.py` |
 | Post-gen guardrail | `app/services/compliance.py` |
 | Mock Core Banking System | `app/services/cbs_adapter.py` |
@@ -72,11 +70,6 @@ OPENAI_API_KEY=your_key_here # only needed if LLM_PROVIDER=openai
 
 LLM_MODEL_ID=gemini-2.5-flash
 
-EMBEDDING_MODEL=all-MiniLM-L6-v2
-RAG_INDEX_PATH=app/data/rag/index.faiss
-RAG_META_PATH=app/data/rag/meta.json
-RAG_TOP_K=3
-
 SERVICE_TOKEN=test-token
 JWT_SECRET_KEY=change-me-in-production
 ```
@@ -114,16 +107,6 @@ docker run -p 8000:8000 -e GEMINI_API_KEY=... -e MOCK_LOCKED_STATUS=true banking
 
 ---
 
-## Rebuilding the Knowledge Base
-
-The FAISS index is pre-built and included. To update it after editing the markdown files in `app/data/kb/`:
-
-```bash
-python app/scripts/ingest_kb.py --src app/data/kb --out app/data/rag
-```
-
----
-
 ## Running Tests
 
 ```bash
@@ -149,9 +132,9 @@ Logging is configured centrally in `app/logger.py` and initialised once at start
 
 | Level | Used for |
 |---|---|
-| `DEBUG` | Intent detection, RAG chunk count, masked prompt contents, provider selection |
+| `DEBUG` | Intent detection, masked prompt contents, provider selection |
 | `INFO` | LLM call duration, `[AUDIT]` compliance events |
-| `WARNING` | `[GUARDRAIL]` output rewrites, RAG retrieval failures |
+| `WARNING` | `[GUARDRAIL]` output rewrites |
 | `ERROR` | LLM call failures (includes full stack trace via `exc_info=True`) |
 
 **Control the log level** via the `LOG_LEVEL` environment variable:
@@ -192,10 +175,6 @@ GitHub Actions workflow at `.github/workflows/ci-cd.yml`:
 | `JWT_SECRET_KEY` | `welcome@123456789` | **Change in production** |
 | `ADMIN_USERNAME` | `admin` | Login username |
 | `ADMIN_PASSWORD` | `password123` | Login password — **change in production** |
-| `EMBEDDING_MODEL` | `all-MiniLM-L6-v2` | Sentence-Transformers model for RAG |
-| `RAG_INDEX_PATH` | `app/data/rag/index.faiss` | Path to FAISS index |
-| `RAG_META_PATH` | `app/data/rag/meta.json` | Path to index metadata |
-| `RAG_TOP_K` | `3` | Number of KB chunks retrieved per query |
 | `SERVICE_TOKEN` | `test-token` | Internal token for CBS adapter calls |
 | `MOCK_LOCKED_STATUS` | `false` | Set `true` to simulate a locked account |
 | `LOG_LEVEL` | `INFO` | Logging verbosity: `DEBUG`, `INFO`, `WARNING`, `ERROR` |

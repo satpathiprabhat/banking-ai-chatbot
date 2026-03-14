@@ -28,6 +28,5 @@ async def health():
     settings = get_settings()
     return {
         'status': 'ok',
-        'rag_enabled': settings.enable_rag,
         'llm_provider': settings.llm_provider,
     }
