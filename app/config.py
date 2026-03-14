@@ -21,7 +21,11 @@ class Settings:
     service_token: str
     llm_provider: str
     llm_model_id: str
+    llm_base_url: str
+    llm_api_key: str
+    gemini_base_url: str
     gemini_api_key: str
+    openai_base_url: str
     openai_api_key: str
     embedding_model: str
     rag_index_path: str
@@ -43,7 +47,13 @@ def get_settings() -> Settings:
         service_token=(os.getenv("SERVICE_TOKEN") or "").strip(),
         llm_provider=(os.getenv("LLM_PROVIDER") or "gemini").strip().lower(),
         llm_model_id=(os.getenv("LLM_MODEL_ID") or "").strip(),
+        llm_base_url=(os.getenv("LLM_BASE_URL") or "").strip(),
+        llm_api_key=(os.getenv("LLM_API_KEY") or "").strip(),
+        gemini_base_url=(
+            os.getenv("GEMINI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta"
+        ).strip().rstrip("/"),
         gemini_api_key=(os.getenv("GEMINI_API_KEY") or "").strip(),
+        openai_base_url=(os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip().rstrip("/"),
         openai_api_key=(os.getenv("OPENAI_API_KEY") or "").strip(),
         embedding_model=(os.getenv("EMBEDDING_MODEL") or "all-MiniLM-L6-v2").strip(),
         rag_index_path=(os.getenv("RAG_INDEX_PATH") or "app/data/rag/index.faiss").strip(),

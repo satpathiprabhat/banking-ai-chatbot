@@ -1,8 +1,9 @@
 import logging
-import os
 import re
 import time
 from typing import List, Dict, Union
+
+import httpx
 
 from app.config import get_settings
 
@@ -20,8 +21,7 @@ def mask_sensitive_info(text: str) -> str:
         return text  # safety
     return re.sub(r'\b\d{6}(\d{4,6})\b', r'XXXXXX\1', text)
 
-# Keep lazy singletons to avoid re-creating clients every call
-_openai_client = None
+REQUEST_TIMEOUT_SECONDS = 30.0
 
 def _to_messages(prompt: Union[str, List[Dict]]) -> List[Dict]:
     """
@@ -49,53 +49,52 @@ def _mask_messages(messages: List[Dict]) -> List[Dict]:
         })
     return masked
 
+
+def _merge_system_into_first_user(messages: List[Dict]) -> List[Dict]:
+    system_contents: List[str] = []
+    other_messages: List[Dict] = []
+
+    for m in messages:
+        if m.get("role") == "system":
+            system_contents.append(m.get("content", "") or "")
+        else:
+            other_messages.append({
+                "role": m.get("role", "user"),
+                "content": m.get("content", "") or "",
+            })
+
+    if system_contents:
+        joined = "\n\n".join(system_contents).strip()
+        if other_messages:
+            other_messages[0]["content"] = f"{joined}\n\n{other_messages[0].get('content', '')}".strip()
+        else:
+            other_messages = [{"role": "user", "content": joined}]
+
+    return other_messages
+
 # --------------------------
 # Gemini path
 # --------------------------
 def _call_gemini(messages: List[Dict]) -> str:
     """
-    Call Gemini using google-generativeai.
-    - Gemini doesn't support 'system' role the same way; we merge system into first user message.
-    - Uses generate_content with [{role, parts:[text]}].
+    Call Gemini via the REST API.
+    - Merge system messages into the first user message for stable behavior.
+    - Uses generateContent with {contents:[{role, parts:[{text}]}]}.
     """
-    try:
-        import google.generativeai as genai  # pip install google-generativeai
-    except Exception as e:
-        raise RuntimeError("Google Generative AI SDK not installed. `pip install google-generativeai`") from e
-
     settings = get_settings()
-    api_key = settings.gemini_api_key or settings.openai_api_key
+    api_key = settings.llm_api_key or settings.gemini_api_key or settings.openai_api_key
     if not api_key:
         raise ValueError("Missing GEMINI_API_KEY (or legacy OPENAI_API_KEY) in environment variables.")
-    genai.configure(api_key=api_key)  # type: ignore
-
-    # Merge system messages into the first user message (your existing workaround)
-    system_contents: List[str] = []
-    other_messages: List[Dict] = []
-    for m in messages:
-        if m.get("role") == "system":
-            system_contents.append(m.get("content", "") or "")
-        else:
-            other_messages.append(m)
-
-    if system_contents:
-        joined = "\n\n".join(system_contents).strip()
-        if other_messages:
-            other_messages[0]["content"] = f"{joined}\n\n{other_messages[0].get('content','')}"
-        else:
-            other_messages = [{"role": "user", "content": joined}]
+    other_messages = _merge_system_into_first_user(messages)
 
     # Convert roles for Gemini (only "user" and "model" allowed)
-    gemini_input = []
+    gemini_input: List[Dict] = []
     for m in other_messages:
         role = m.get("role", "user")
-
-        # Gemini only accepts "user" and "model"
         if role == "assistant":
             role = "model"
         elif role not in ("user", "model"):
             role = "user"
-
         gemini_input.append({
             "role": role,
             "parts": [{"text": m.get("content", "") or ""}]
@@ -105,58 +104,72 @@ def _call_gemini(messages: List[Dict]) -> str:
 
     model_id = settings.llm_model_id or "gemini-1.5-flash"
     logger.debug("Using Gemini model: %s", model_id)
-    model = genai.GenerativeModel(model_id)  # type: ignore
+    base_url = settings.llm_base_url or settings.gemini_base_url
+    url = f"{base_url}/models/{model_id}:generateContent"
+    payload = {"contents": gemini_input}
 
     start = time.time()
-    resp = model.generate_content(gemini_input)
+    response = httpx.post(
+        url,
+        params={"key": api_key},
+        json=payload,
+        timeout=REQUEST_TIMEOUT_SECONDS,
+    )
     dur = time.time() - start
-    logger.info("Gemini call completed in %.2fs", dur)
+    logger.info("Gemini REST call completed in %.2fs | status=%s", dur, response.status_code)
+    response.raise_for_status()
 
-    if hasattr(resp, "text") and resp.text:
-        return resp.text
+    data = response.json()
+
+    candidates = data.get("candidates") or []
+    if candidates:
+        content = (candidates[0] or {}).get("content") or {}
+        parts = content.get("parts") or []
+        texts = [part.get("text", "") for part in parts if isinstance(part, dict) and part.get("text")]
+        if texts:
+            return "\n".join(texts).strip()
     return "[Error] No response text received from Gemini."
 
 # --------------------------
 # OpenAI path
 # --------------------------
-def _ensure_openai_client():
-    global _openai_client
-    if _openai_client is None:
-        try:
-            from openai import OpenAI  # type: ignore # pip install openai>=1.0.0
-        except Exception as e:
-            raise RuntimeError("OpenAI SDK not installed. `pip install openai`") from e
-
-        # OpenAI SDK reads OPENAI_API_KEY from env
-        settings = get_settings()
-        if not settings.openai_api_key:
-            raise ValueError("Missing OPENAI_API_KEY in environment variables.")
-        _openai_client = OpenAI()
-    return _openai_client
-
 def _call_openai(messages: List[Dict]) -> str:
     """
-    Call OpenAI Chat Completions API (SDK v1+). Supports 'system' role natively.
+    Call OpenAI Chat Completions via the REST API.
     """
-    client = _ensure_openai_client()
-
     oa_messages = [{"role": m.get("role", "user"), "content": m.get("content", "") or ""} for m in messages]
     logger.debug("OpenAI messages (masked): %s", oa_messages)
 
     settings = get_settings()
+    api_key = settings.llm_api_key or settings.openai_api_key
+    if not api_key:
+        raise ValueError("Missing OPENAI_API_KEY in environment variables.")
     model_id = settings.llm_model_id or "gpt-4o-mini"
+    base_url = settings.llm_base_url or settings.openai_base_url
+    payload = {
+        "model": model_id,
+        "messages": oa_messages,
+        "temperature": 0.2,
+    }
 
     start = time.time()
-    resp = client.chat.completions.create(
-        model=model_id,
-        messages=oa_messages, # type: ignore
-        temperature=0.2,
+    response = httpx.post(
+        f"{base_url}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json=payload,
+        timeout=REQUEST_TIMEOUT_SECONDS,
     )
     dur = time.time() - start
-    logger.info("OpenAI call completed in %.2fs | resp_id=%s", dur, getattr(resp, "id", "n/a"))
+    logger.info("OpenAI REST call completed in %.2fs | status=%s", dur, response.status_code)
+    response.raise_for_status()
+
+    data = response.json()
 
     try:
-        return resp.choices[0].message.content or "[Error] Empty response from OpenAI."
+        return data["choices"][0]["message"]["content"] or "[Error] Empty response from OpenAI."
     except Exception:
         return "[Error] Failed to parse OpenAI response."
 
