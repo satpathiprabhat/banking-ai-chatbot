@@ -13,12 +13,12 @@ Security notes:
 """
 
 import logging
-import os
 import json
-from typing import List, Dict, Tuple
+import os
+from typing import List, Dict
 
 import numpy as np
-from dotenv import load_dotenv
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -32,19 +32,7 @@ except Exception:
     SentenceTransformer = None  # type: ignore
     _RAG_DEPS_OK = False
 
-
-# --------------------------
-# Env setup (compatible with your existing apiKey.env layout)
-# --------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(BASE_DIR, "../../apiKey.env")
-load_dotenv(dotenv_path=env_path)
-
-# ---------- Configuration ----------
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL")
-INDEX_PATH = os.getenv("RAG_INDEX_PATH")
-META_PATH = os.getenv("RAG_META_PATH")
-TOP_K_DEFAULT = int(os.getenv("RAG_TOP_K", "3"))
+TOP_K_DEFAULT = get_settings().rag_top_k
 
 # ---------- Globals (lazy) ----------
 _model = None
@@ -57,7 +45,7 @@ def _load_model():
     if _model is None:
         if not _RAG_DEPS_OK:
             raise RuntimeError("RAG dependencies missing. Install sentence-transformers and faiss-cpu.")
-        _model = SentenceTransformer(EMBEDDING_MODEL) # type: ignore
+        _model = SentenceTransformer(get_settings().embedding_model) # type: ignore
     return _model
 
 
@@ -69,14 +57,17 @@ def _load_index():
     if not _RAG_DEPS_OK:
         raise RuntimeError("RAG dependencies missing.")
 
-    if not INDEX_PATH or not META_PATH or not (os.path.exists(INDEX_PATH) and os.path.exists(META_PATH)):
+    settings = get_settings()
+    if not settings.rag_index_path or not settings.rag_meta_path or not (
+        os.path.exists(settings.rag_index_path) and os.path.exists(settings.rag_meta_path)
+    ):
         raise FileNotFoundError(
-            f"RAG index not found. Expected {INDEX_PATH} and {META_PATH}. "
+            f"RAG index not found. Expected {settings.rag_index_path} and {settings.rag_meta_path}. "
             "Run scripts/ingest_kb.py first."
         )
 
-    _index = faiss.read_index(INDEX_PATH)  # type: ignore
-    with open(META_PATH, "r", encoding="utf-8") as f:
+    _index = faiss.read_index(settings.rag_index_path)  # type: ignore
+    with open(settings.rag_meta_path, "r", encoding="utf-8") as f:
         _meta = json.load(f)
 
     return _index, _meta

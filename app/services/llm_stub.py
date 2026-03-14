@@ -4,7 +4,7 @@ import re
 import time
 from typing import List, Dict, Union
 
-from dotenv import load_dotenv
+from app.config import get_settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +19,6 @@ def mask_sensitive_info(text: str) -> str:
     if not isinstance(text, str):
         return text  # safety
     return re.sub(r'\b\d{6}(\d{4,6})\b', r'XXXXXX\1', text)
-
-# --------------------------
-# Env setup (compatible with your existing apiKey.env layout)
-# --------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-env_path = os.path.join(BASE_DIR, "../../apiKey.env")
-load_dotenv(dotenv_path=env_path)
-
-# Provider & model selection
-LLM_PROVIDER = (os.getenv("LLM_PROVIDER") or "gemini").strip().lower()
-LLM_MODEL_ID = os.getenv("LLM_MODEL_ID")  # optional override
 
 # Keep lazy singletons to avoid re-creating clients every call
 _openai_client = None
@@ -74,7 +63,8 @@ def _call_gemini(messages: List[Dict]) -> str:
     except Exception as e:
         raise RuntimeError("Google Generative AI SDK not installed. `pip install google-generativeai`") from e
 
-    api_key = os.getenv("GEMINI_API_KEY") or os.getenv("OPENAI_API_KEY")  # backward-compat with your old env
+    settings = get_settings()
+    api_key = settings.gemini_api_key or settings.openai_api_key
     if not api_key:
         raise ValueError("Missing GEMINI_API_KEY (or legacy OPENAI_API_KEY) in environment variables.")
     genai.configure(api_key=api_key)  # type: ignore
@@ -95,10 +85,25 @@ def _call_gemini(messages: List[Dict]) -> str:
         else:
             other_messages = [{"role": "user", "content": joined}]
 
-    gemini_input = [{"role": m.get("role", "user"), "parts": [m.get("content", "")]} for m in other_messages]
+    # Convert roles for Gemini (only "user" and "model" allowed)
+    gemini_input = []
+    for m in other_messages:
+        role = m.get("role", "user")
+
+        # Gemini only accepts "user" and "model"
+        if role == "assistant":
+            role = "model"
+        elif role not in ("user", "model"):
+            role = "user"
+
+        gemini_input.append({
+            "role": role,
+            "parts": [{"text": m.get("content", "") or ""}]
+        })
+
     logger.debug("Prepared gemini_input (masked): %s", gemini_input)
 
-    model_id = os.getenv("LLM_MODEL_ID") or LLM_MODEL_ID or "gemini-1.5-flash"
+    model_id = settings.llm_model_id or "gemini-1.5-flash"
     logger.debug("Using Gemini model: %s", model_id)
     model = genai.GenerativeModel(model_id)  # type: ignore
 
@@ -123,7 +128,8 @@ def _ensure_openai_client():
             raise RuntimeError("OpenAI SDK not installed. `pip install openai`") from e
 
         # OpenAI SDK reads OPENAI_API_KEY from env
-        if not os.getenv("OPENAI_API_KEY"):
+        settings = get_settings()
+        if not settings.openai_api_key:
             raise ValueError("Missing OPENAI_API_KEY in environment variables.")
         _openai_client = OpenAI()
     return _openai_client
@@ -137,7 +143,8 @@ def _call_openai(messages: List[Dict]) -> str:
     oa_messages = [{"role": m.get("role", "user"), "content": m.get("content", "") or ""} for m in messages]
     logger.debug("OpenAI messages (masked): %s", oa_messages)
 
-    model_id = os.getenv("LLM_MODEL_ID") or LLM_MODEL_ID or "gpt-4o-mini"
+    settings = get_settings()
+    model_id = settings.llm_model_id or "gpt-4o-mini"
 
     start = time.time()
     resp = client.chat.completions.create(
@@ -170,7 +177,7 @@ def call_llm(prompt: Union[str, List[Dict]]) -> str:
         messages = _to_messages(prompt)
         masked_messages = _mask_messages(messages)
 
-        provider = (os.getenv("LLM_PROVIDER") or LLM_PROVIDER).strip().lower()
+        provider = get_settings().llm_provider
         logger.debug("LLM provider: %s", provider)
 
         if provider == "openai":

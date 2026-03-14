@@ -5,12 +5,12 @@ from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 import logging
-import os
 import re
 import uuid
 
 logger = logging.getLogger(__name__)
 
+from app.config import get_settings
 from app.services.auth import verify_jwt_token
 from app.services.llm_stub import call_llm, mask_sensitive_info
 from app.services.prompt_builder import build_prompt
@@ -145,6 +145,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
       7) Post-gen guardrail to remove speculative lock/cred claims
     """
     request_id = f"req-{uuid.uuid4().hex[:12]}"
+    settings = get_settings()
 
     # 1) AuthN
     username = verify_jwt_token(token)
@@ -187,9 +188,8 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
 
     if intent == "transactional:login":
         # Only now call CBS; include lock-related fields (masked summary)
-        service_token = os.getenv("SERVICE_TOKEN", "test-token")
         try:
-            masked_full = fetch_masked_netbanking(req.customer_id, service_token)
+            masked_full = fetch_masked_netbanking(req.customer_id, settings.service_token)
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to fetch CBS data")
         masked_ctx = {
@@ -207,9 +207,8 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
 
     elif intent == "transactional":
         # Generic transactional; keep it benign/minimal
-        service_token = os.getenv("SERVICE_TOKEN", "test-token")
         try:
-            masked_full = fetch_masked_netbanking(req.customer_id, service_token)
+            masked_full = fetch_masked_netbanking(req.customer_id, settings.service_token)
         except Exception:
             raise HTTPException(status_code=500, detail="Failed to fetch CBS data")
         masked_ctx = {

@@ -1,6 +1,6 @@
-# app/services/cbs_adapter.py
-import os
 from datetime import datetime
+
+from app.config import get_settings
 
 def fetch_masked_netbanking(customer_id: str, service_token: str) -> dict:
     """
@@ -14,7 +14,7 @@ def fetch_masked_netbanking(customer_id: str, service_token: str) -> dict:
       - Mask PII before returning
       - Never return full account numbers, PAN, etc.
     """
-    locked = os.getenv("MOCK_LOCKED_STATUS", "false").lower() in ("1", "true", "yes")
+    locked = get_settings().mock_locked_status
 
     if locked:
         return {

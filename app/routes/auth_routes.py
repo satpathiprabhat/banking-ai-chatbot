@@ -1,12 +1,9 @@
-import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from app.services.auth import create_jwt_token
+from app.config import get_settings
 
 router = APIRouter()
-
-_VALID_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
-_VALID_PASSWORD = os.getenv("ADMIN_PASSWORD", "password123")
 
 class LoginRequest(BaseModel):
     username: str
@@ -14,7 +11,11 @@ class LoginRequest(BaseModel):
 
 @router.post("/login")
 def login(req: LoginRequest):
-    if req.username == _VALID_USERNAME and req.password == _VALID_PASSWORD:
+    settings = get_settings()
+    if not settings.auth_configured:
+        raise HTTPException(status_code=503, detail="Authentication is not configured")
+
+    if req.username == settings.admin_username and req.password == settings.admin_password:
         token = create_jwt_token(req.username)
         return {"token": token}
     else:
