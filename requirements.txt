@@ -6,6 +6,8 @@ requests
 httpx
 PyJWT==2.8.0
 sentence-transformers>=2.6.0
+transformers>=4.40.0
+torch>=2.2.0
 faiss-cpu>=1.8.0.post1
 google-generativeai
 langchain
