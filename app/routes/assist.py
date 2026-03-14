@@ -17,16 +17,22 @@ from app.services.prompt_builder import build_prompt
 from app.services.cbs_adapter import fetch_masked_netbanking
 from app.services.compliance import enforce_output_policies  # post-gen guardrail
 
-# Optional RAG (fail-open if not present)
-try:
-    from app.services import rag_service  # must expose retrieve(query: str, top_k: int)
-    RAG_AVAILABLE = True
-except Exception:
-    rag_service = None  # type: ignore
-    RAG_AVAILABLE = False
-
 router = APIRouter()
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+
+def _retrieve_rag(query: str, *, top_k: int) -> List[Dict]:
+    try:
+        from app.services import rag_service
+    except Exception as exc:
+        logger.warning("RAG import failed: %s", exc)
+        return []
+
+    try:
+        return rag_service.retrieve(query, top_k=top_k)  # type: ignore[attr-defined]
+    except Exception as exc:
+        logger.warning("RAG retrieve failed: %s", exc)
+        return []
 
 # -------------------- Request Model --------------------
 class AssistRequest(BaseModel):
@@ -146,6 +152,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
     """
     request_id = f"req-{uuid.uuid4().hex[:12]}"
     settings = get_settings()
+    rag_enabled = settings.enable_rag
 
     # 1) AuthN
     username = verify_jwt_token(token)
@@ -161,6 +168,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
             "message": SAFE_PII_RESPONSE,
             "intent": "pii_deflected",
             "rag_used": False,
+            "rag_enabled": rag_enabled,
             "sources": [],
         }
 
@@ -174,17 +182,16 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
     retrieved: List[Dict] = []  # type-stable list
     masked_ctx: Dict = {}
 
-    logger.debug("intent=%s | RAG available=%s", intent, RAG_AVAILABLE)
+    logger.debug("intent=%s | RAG enabled=%s", intent, rag_enabled)
 
     # Enable RAG for knowledge AND feature intents (blended mode)
-    if (intent == "knowledge" or intent == "transactional:feature") and RAG_AVAILABLE:
-        try:
+    if intent == "knowledge" or intent == "transactional:feature":
+        if rag_enabled:
             rag_query = req.query if intent == "knowledge" else _feature_hint(req.query)
-            retrieved = rag_service.retrieve(rag_query, top_k=3)  # type: ignore
-        except Exception as e:
-            logger.warning("RAG retrieve failed: %s", e)
-            retrieved = []
-        logger.debug("RAG chunks retrieved: %d", len(retrieved))
+            retrieved = _retrieve_rag(rag_query, top_k=settings.rag_top_k)
+            logger.debug("RAG chunks retrieved: %d", len(retrieved))
+        else:
+            logger.info("RAG disabled by configuration; skipping retrieval for intent=%s", intent)
 
     if intent == "transactional:login":
         # Only now call CBS; include lock-related fields (masked summary)
@@ -253,6 +260,7 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
             "message": safe_answer,
             "intent": intent,
             "rag_used": bool(retrieved),
+            "rag_enabled": rag_enabled,
             "sources": sources,
         }
 
@@ -262,5 +270,6 @@ async def assist(req: AssistRequest, token: str = Depends(oauth2_scheme)):
         "message": safe_answer if isinstance(safe_answer, str) else "Sorry, something went wrong.",
         "intent": intent,
         "rag_used": bool(retrieved),
+        "rag_enabled": rag_enabled,
         "sources": sources,
     }
