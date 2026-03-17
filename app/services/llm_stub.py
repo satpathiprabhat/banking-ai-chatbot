@@ -1,7 +1,7 @@
 import logging
 import re
 import time
-from typing import List, Dict, Union
+from typing import Any, List, Dict, Union
 
 import httpx
 
@@ -22,6 +22,75 @@ def mask_sensitive_info(text: str) -> str:
     return re.sub(r'\b\d{6}(\d{4,6})\b', r'XXXXXX\1', text)
 
 REQUEST_TIMEOUT_SECONDS = 30.0
+
+
+def _extract_text_from_content(content: Any) -> str:
+    if isinstance(content, str):
+        return content.strip()
+
+    if isinstance(content, list):
+        parts: List[str] = []
+        for item in content:
+            if isinstance(item, str) and item.strip():
+                parts.append(item.strip())
+                continue
+            if not isinstance(item, dict):
+                continue
+
+            # OpenAI-compatible gateways may return text blocks in different shapes.
+            text_value = item.get("text")
+            if isinstance(text_value, str) and text_value.strip():
+                parts.append(text_value.strip())
+                continue
+
+            if isinstance(text_value, dict):
+                nested = text_value.get("value")
+                if isinstance(nested, str) and nested.strip():
+                    parts.append(nested.strip())
+                    continue
+
+            nested = item.get("content")
+            if isinstance(nested, str) and nested.strip():
+                parts.append(nested.strip())
+
+        return "\n".join(parts).strip()
+
+    if isinstance(content, dict):
+        for key in ("text", "content", "output_text"):
+            value = content.get(key)
+            extracted = _extract_text_from_content(value)
+            if extracted:
+                return extracted
+
+    return ""
+
+
+def _extract_openai_text(data: Dict[str, Any]) -> str:
+    choices = data.get("choices")
+    if isinstance(choices, list) and choices:
+        message = (choices[0] or {}).get("message") or {}
+        extracted = _extract_text_from_content(message.get("content"))
+        if extracted:
+            return extracted
+
+    # Some OpenAI-compatible providers use the newer responses-style output shape.
+    output = data.get("output")
+    if isinstance(output, list):
+        chunks: List[str] = []
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            extracted = _extract_text_from_content(item.get("content"))
+            if extracted:
+                chunks.append(extracted)
+        if chunks:
+            return "\n".join(chunks).strip()
+
+    extracted = _extract_text_from_content(data.get("output_text"))
+    if extracted:
+        return extracted
+
+    return ""
 
 def _to_messages(prompt: Union[str, List[Dict]]) -> List[Dict]:
     """
@@ -167,11 +236,12 @@ def _call_openai(messages: List[Dict]) -> str:
     response.raise_for_status()
 
     data = response.json()
+    parsed = _extract_openai_text(data)
+    if parsed:
+        return parsed
 
-    try:
-        return data["choices"][0]["message"]["content"] or "[Error] Empty response from OpenAI."
-    except Exception:
-        return "[Error] Failed to parse OpenAI response."
+    logger.warning("Unable to parse OpenAI response shape. Top-level keys: %s", sorted(data.keys()))
+    return "[Error] Failed to parse OpenAI response."
 
 # --------------------------
 # Unified entrypoint (unchanged signature)
